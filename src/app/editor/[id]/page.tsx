@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AnimationStudio from "@/components/AnimationStudio";
+import { Badge } from "@/components/ui/badge";
+import { Play } from "lucide-react";
 
 interface Project {
   id: string;
