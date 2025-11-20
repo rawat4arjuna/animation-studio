@@ -1,8 +1,12 @@
 
 import { createYoga, createSchema } from 'graphql-yoga'
 import { NextApiRequest, NextApiResponse } from 'next'
-import prisma from '@/lib/prisma' // Import your Prisma client
+import prisma from '@/lib/prisma'
 import { jwtDecode } from 'jwt-decode';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
 
 // Helper to get user from token
 const getUser = async (req: NextApiRequest) => {
@@ -10,13 +14,14 @@ const getUser = async (req: NextApiRequest) => {
   if (!token) return null;
 
   try {
-    const decoded: { id: string } = jwtDecode(token);
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
     const user = await prisma.user.findUnique({ where: { id: decoded.id } });
     return user;
   } catch (error) {
     return null;
   }
 };
+
 
 const { handleRequest } = createYoga<{
   req: NextApiRequest;
@@ -27,14 +32,29 @@ const { handleRequest } = createYoga<{
       type Query {
         projects: [Project!]
         project(id: String!): Project
+        me: User
       }
 
       type Mutation {
         createProject(name: String!, description: String, fps: Int): Project
         deleteProject(id: String!): Project
         updateProject(id: String!, name: String, description: String, fps: Int): Project
-        createFrame(projectId: String!, frameIndex: Int!, imageData: String!, thumbnail: String!): Frame
+        saveFrame(projectId: String!, frameIndex: Int!, imageData: String!, thumbnail: String!): Frame
         deleteFrame(id: String!): Frame
+        signup(name: String!, email: String!, password: String!): User
+        login(email: String!, password: String!): AuthPayload
+      }
+
+      type User {
+        id: String!
+        name: String
+        email: String
+        image: String
+      }
+
+      type AuthPayload {
+        token: String!
+        user: User!
       }
 
       type Project {
@@ -59,6 +79,9 @@ const { handleRequest } = createYoga<{
     `,
     resolvers: {
       Query: {
+        me: async (_, __, { req }) => {
+          return getUser(req);
+        },
         projects: async (_, __, { req }) => {
           const user = await getUser(req);
           if (!user) throw new Error('Not authenticated');
@@ -83,6 +106,42 @@ const { handleRequest } = createYoga<{
         },
       },
       Mutation: {
+        signup: async (_, { name, email, password }) => {
+          const existingUser = await prisma.user.findUnique({ where: { email } });
+          if (existingUser) {
+            throw new Error('Email is already in use');
+          }
+
+          const hashedPassword = await bcrypt.hash(password, 10);
+
+          const user = await prisma.user.create({
+            data: {
+              name,
+              email,
+              password: hashedPassword,
+            },
+          });
+
+          return user;
+        },
+        login: async (_, { email, password }) => {
+          const user = await prisma.user.findUnique({ where: { email } });
+          if (!user || !user.password) {
+            throw new Error('Invalid credentials');
+          }
+
+          const isValid = await bcrypt.compare(password, user.password);
+          if (!isValid) {
+            throw new Error('Invalid credentials');
+          }
+
+          const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1d' });
+
+          return {
+            token,
+            user,
+          };
+        },
         createProject: async (_, { name, description, fps }, { req }) => {
           const user = await getUser(req);
           if (!user) throw new Error('Not authenticated');
@@ -112,16 +171,25 @@ const { handleRequest } = createYoga<{
             data: { name, description, fps }
           }).then(() => prisma.project.findFirst({ where: { id } }));
         },
-        createFrame: async (_, { projectId, frameIndex, imageData, thumbnail }, { req }) => {
+        saveFrame: async (_, { projectId, frameIndex, imageData, thumbnail }, { req }) => {
           const user = await getUser(req);
           if (!user) throw new Error('Not authenticated');
 
           const project = await prisma.project.findFirst({ where: { id: projectId, userId: user.id } });
           if (!project) throw new Error('Project not found');
+          
+          const existingFrame = await prisma.frame.findFirst({ where: { projectId, frameIndex } });
 
-          return prisma.frame.create({
-            data: { projectId, frameIndex, imageData, thumbnail }
-          });
+          if (existingFrame) {
+             return prisma.frame.update({
+              where: { id: existingFrame.id },
+              data: { imageData, thumbnail },
+            });
+          } else {
+            return prisma.frame.create({
+              data: { projectId, frameIndex, imageData, thumbnail },
+            });
+          }
         },
         deleteFrame: async (_, { id }, { req }) => {
           const user = await getUser(req);

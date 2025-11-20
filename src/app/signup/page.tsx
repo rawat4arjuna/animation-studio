@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -12,13 +13,35 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { gql } from "@apollo/client";
+import { useMutation } from "@apollo/client/react";
+
+const SIGNUP_MUTATION = gql`
+  mutation Signup($name: String!, $email: String!, $password: String!) {
+    signup(name: $name, email: $email, password: $password) {
+      id
+    }
+  }
+`;
+
+type SignupData = {
+  signup: {
+    id: string;
+  } | null;
+};
+
+type SignupVars = {
+  name: string;
+  email: string;
+  password: string;
+};
 
 export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const [signupMutation, { loading, error }] = useMutation<SignupData, SignupVars>(SIGNUP_MUTATION);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,25 +49,18 @@ export default function SignupPage() {
       toast.error("Please fill in all fields.");
       return;
     }
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
 
-      if (res.ok) {
+    try {
+      const result = await signupMutation({ variables: { name, email, password } });
+      const signup = result?.data?.signup ?? null;
+      if (signup && signup.id) {
         toast.success("Account created successfully!");
-        router.push('/login');
-      } else {
-        const errorData = await res.json();
-        toast.error(errorData.error || "Failed to create account");
+        router.push("/login");
+        return;
       }
-    } catch (error) {
-        toast.error("An unexpected error occurred.");
-    } finally {
-        setLoading(false);
+      toast.error("Signup failed: no id returned.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "An unexpected error occurred.");
     }
   };
 
@@ -95,6 +111,7 @@ export default function SignupPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing up..." : "Sign Up"}
             </Button>
+            {error && <div className="text-red-500 mt-2">{error.message}</div>}
           </form>
           <div className="mt-4 text-center text-sm">
             Already have an account?{" "}

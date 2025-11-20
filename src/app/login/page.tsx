@@ -1,5 +1,5 @@
+"use client";
 
-'use client';
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -13,12 +13,33 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { gql } from "@apollo/client";
+import { useMutation } from "@apollo/client/react";
+
+type LoginData = {
+  login: {
+    token: string | null;
+  } | null;
+};
+
+type LoginVars = {
+  email: string;
+  password: string;
+};
+
+const LOGIN_MUTATION = gql`
+  mutation Login($email: String!, $password: String!) {
+    login(email: $email, password: $password) {
+      token
+    }
+  }
+`;
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const [login, { loading, error }] = useMutation<LoginData, LoginVars>(LOGIN_MUTATION);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,29 +47,20 @@ export default function LoginPage() {
       toast.error("Please enter both email and password.");
       return;
     }
-    setLoading(true);
+
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
+      const result = await login({ variables: { email, password } });
+      const token = result?.data?.login?.token ?? null;
+      if (token) {
+        localStorage.setItem("token", token);
         toast.success("Logged in successfully!");
-        localStorage.setItem('token', data.token);
-        router.push('/dashboard');
-      } else {
-        toast.error(data.error || "Invalid email or password");
+        router.push("/dashboard");
+        return;
       }
-    } catch (error) {
-        toast.error("An unexpected error occurred during login.");
-    } finally {
-        setLoading(false);
+      toast.error("Login failed: no token returned.");
+    } catch (err: any) {
+      const msg = err?.message ?? "An unexpected error occurred during login.";
+      toast.error(msg);
     }
   };
 
@@ -88,6 +100,7 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Logging in..." : "Login"}
             </Button>
+            {error && <div className="text-red-500 mt-2">{error.message}</div>}
           </form>
         </CardContent>
       </Card>
