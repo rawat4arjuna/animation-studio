@@ -1,4 +1,5 @@
-"use client";
+
+'use client';
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -19,67 +20,75 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!email || !password) {
-      toast.error("Please fill in all fields.");
+      toast.error("Please enter both email and password.");
       return;
     }
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast.success("Logged in successfully!");
-      router.push("/");
-    }, 1000);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success("Logged in successfully!");
+        localStorage.setItem('token', data.token);
+        router.push('/dashboard');
+      } else {
+        toast.error(data.error || "Invalid email or password");
+      }
+    } catch (error) {
+        toast.error("An unexpected error occurred during login.");
+    } finally {
+        setLoading(false);
+    }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-950">
+      <Card className="w-full max-w-md mx-4">
+        <CardHeader className="text-center">
           <CardTitle>Login</CardTitle>
-          <CardDescription>
-            Log in to your account to continue.
-          </CardDescription>
+          <CardDescription>Welcome back! Please login to your account.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="m@example.com"
-                required
+                placeholder="email@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
               />
             </div>
-            <div className="space-y-2">
+            <div>
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
-                required
+                placeholder="********"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
               />
             </div>
-            <Button onClick={handleLogin} className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Logging in..." : "Login"}
             </Button>
-          </div>
-          <div className="mt-4 text-center text-sm">
-            Don't have an account?{" "}
-            <a href="/signup" className="underline">
-              Sign up
-            </a>
-          </div>
-          <div className="mt-2 text-center text-sm">
-            <a href="/forgot-password" className="underline">
-              Forgot your password?
-            </a>
-          </div>
+          </form>
         </CardContent>
       </Card>
     </div>

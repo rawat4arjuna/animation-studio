@@ -1,7 +1,0 @@
-{
-  "/api/projects/[id]/frames/route": "app/api/projects/[id]/frames/route.js",
-  "/api/projects/[id]/route": "app/api/projects/[id]/route.js",
-  "/api/projects/route": "app/api/projects/route.js",
-  "/editor/[id]/page": "app/editor/[id]/page.js",
-  "/page": "app/page.js"
-}
